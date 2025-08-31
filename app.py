@@ -3,88 +3,78 @@ import google.generativeai as genai
 import time
 import PyPDF2
 
-# ============== זה החלק ששדרגנו ==============
-
-# פונקציה לחילוץ טקסט מקובץ PDF
-def extract_text_from_pdf(pdf_file):
+# --- פונקציה לקריאת מאגר השאלות מהקובץ ---
+# @st.cache_data יגרום לפונקציה לרוץ רק פעם אחת ולשמור את התוצאה בזיכרון
+@st.cache_data
+def load_knowledge_base(file_path):
     try:
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-        return text
+        with open(file_path, "rb") as pdf_file:
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text()
+            return text
+    except FileNotFoundError:
+        st.error(f"שגיאה: הקובץ '{file_path}' לא נמצא במאגר ה-GitHub. אנא ודא שהעלית אותו בשם הנכון.")
+        return None
     except Exception as e:
         st.error(f"שגיאה בקריאת קובץ ה-PDF: {e}")
         return None
 
-# ההוראות הבסיסיות לבוט
+# --- הגדרות והוראות לבוט ---
+
+# 1. טעינת הידע מהקובץ שהעלינו ל-GitHub
+knowledge_base_text = load_knowledge_base("819387ALL.pdf")
+
+# 2. ההוראות הבסיסיות לבוט (העתק לכאן את כל ההוראות המפורטות שלך)
 BASE_SYSTEM_INSTRUCTION = """
-אתה מורה מומחה במגמות מכטרוקניה... (וכו', כל ההוראות הקודמות שלך)
+אתה מורה מומחה במגמות מכטרוניקה... (וכו')
 ...
-**יכולות מיוחדות: באפשרותך לגשת לאינטרנט...**
+**יכולות מיוחדות: יש לך גישה מלאה לאינטרנט...**
 """
-# (שים לב: קיצרתי את ההוראות כאן כדי לא להעמיס, אבל בקוד שלך הדבק את כולן)
 
-# =======================================================
-
-
-# --- הגדרות עמוד ו-UI ---
-st.set_page_config(page_title="המורה למכטרוניקה", page_icon="🤖", layout="wide")
-
-st.markdown("""
-<style>
-    body { direction: rtl; }
-    .stTextInput > div > div > input { direction: rtl; }
-</style>
-""", unsafe_allow_html=True)
-
-st.title("🤖 המורה למכטרוניקה (עם העלאת קבצים)")
-
-# --- סרגל צד להעלאת קבצים ---
-with st.sidebar:
-    st.header("🧠 האכלת הבוט במידע")
-    uploaded_file = st.file_uploader("העלה קובץ PDF מהדרייב שלך", type=["pdf"])
-    file_context = ""
-    if uploaded_file is not None:
-        with st.spinner("מעבד את הקובץ..."):
-            file_context = extract_text_from_pdf(uploaded_file)
-            if file_context:
-                st.success("הקובץ עובד בהצלחה! הבוט 'למד' את תוכנו.")
-
-# --- הרכבת ההוראות המלאות (בסיס + תוכן מהקובץ) ---
-if file_context:
-    dynamic_system_instruction = f"""
+# 3. שילוב מאגר הידע בהוראות למערכת
+# רק אם הקובץ נטען בהצלחה, נוסיף את תוכנו להוראות
+if knowledge_base_text:
+    SYSTEM_INSTRUCTION = f"""
     {BASE_SYSTEM_INSTRUCTION}
 
     ---
-    **מידע נוסף מקובץ שהועלה:**
-    המשתמש העלה קובץ עם התוכן הבא. בסס את תשובותיך גם על מידע זה:
-    
-    {file_context}
+    **מאגר ידע קבוע:**
+    להלן מאגר ידע קבוע המכיל שאלות, תרגילים וחומרים נוספים.
+    השתמש במאגר זה כמקור מידע מרכזי ובסיסי לפני שאתה פונה לאינטרנט.
+    תוכן המאגר:
+    {knowledge_base_text}
     ---
     """
 else:
-    dynamic_system_instruction = BASE_SYSTEM_INSTRUCTION
+    SYSTEM_INSTRUCTION = BASE_SYSTEM_INSTRUCTION
 
+
+PAGE_TITLE = "🤖 המורה למכטרוניקה (עם מאגר ידע)"
+INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי למכטרוניקה. מאגר הידע שלי טעון ומוכן. איך אוכל לעזור?"
+
+# --- הגדרות עמוד ו-UI (ללא שינוי) ---
+st.set_page_config(page_title=PAGE_TITLE, page_icon="🤖", layout="wide")
+st.markdown("""<style> body { direction: rtl; } .stTextInput > div > div > input { direction: rtl; } </style>""", unsafe_allow_html=True)
+st.title(PAGE_TITLE)
 
 # --- הגדרות המודל וה-API ---
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     model = genai.GenerativeModel(
         model_name="gemini-1.5-pro-latest",
-        system_instruction=dynamic_system_instruction,
+        system_instruction=SYSTEM_INSTRUCTION,
         tools=['google_search_retrieval']
     )
 except Exception as e:
     st.error("שגיאה בהגדרת ה-API Key.", icon="🚨")
     st.stop()
 
-# --- לוגיקת הצ'אט (נשארה כמעט זהה) ---
-INITIAL_MESSAGE = "שלום! תוכל לשאול אותי שאלות, או להעלות קובץ PDF בסרגל הצד כדי שאנתח אותו."
-if "chat" not in st.session_state or uploaded_file is not None:
+# --- לוגיקת הצ'אט (ללא שינוי) ---
+if "chat" not in st.session_state:
     st.session_state.chat = model.start_chat(history=[])
-    if "messages" not in st.session_state or uploaded_file is not None:
-        st.session_state.messages = [{"role": "assistant", "content": INITIAL_MESSAGE}]
+    st.session_state.messages = [{"role": "assistant", "content": INITIAL_MESSAGE}]
 
 for message in st.session_state.get("messages", []):
      with st.chat_message(message["role"]):
@@ -95,7 +85,7 @@ if prompt := st.chat_input("כתבו כאן את שאלתכם..."):
     with st.chat_message("user"):
         st.markdown(f'<div style="direction: rtl;">{prompt}</div>', unsafe_allow_html=True)
     
-    with st.spinner("חושב וגם מחפש ברשת..."):
+    with st.spinner("חושב, מעיין במאגר וגם מחפש ברשת..."):
         response = st.session_state.chat.send_message(prompt)
 
     with st.chat_message("assistant"):
