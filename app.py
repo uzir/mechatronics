@@ -24,7 +24,7 @@ def load_knowledge_base(file_path):
 # --- הגדרות והוראות לבוט ---
 
 # 1. טעינת הידע מהקובץ שהעלינו ל-GitHub (שם הקובץ עודכן)
-knowledge_base_text = load_knowledge_base("819387ALL_scanned.pdf")
+knowledge_base_text = load_knowledge_base("819387ALL.pdf")
 
 # 2. ההוראות הבסיסיות לבוט (העתק לכאן את כל ההוראות המפורטות שלך)
 BASE_SYSTEM_INSTRUCTION = """
