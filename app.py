@@ -125,7 +125,7 @@ with tab_quiz:
 # --- טאב 4: יצירת תמונות ---
 with tab_image_generation:
     st.header("יצירת תמונות מטקסט (Text-to-Image)")
-    st.info("תאר במילים את התמונה שברצונך שהבינה המלאכותית תיצור עבורך.")
+    st.info("תאר במילים את התמונה שברצונך שהבינה המלאכותית תיצור עבורך - עדיף באנגלית.")
     
     image_gen_prompt = st.text_area("התיאור שלך (באנגלית לקבלת התוצאות הטובות ביותר):", key="image_gen_prompt", placeholder="A photorealistic image of a robot arm assembling a circuit board in a futuristic factory")
 
