@@ -21,7 +21,7 @@ def load_knowledge_base(file_path):
         return None
 
 # --- הגדרות והוראות לבוט ---
-knowledge_base_text = load_knowledge_base("819387ALL_scanned.pdf")
+knowledge_base_text = load_knowledge_base("819387ALL.pdf")
 BASE_SYSTEM_INSTRUCTION = """
 אתה מורה מומחה במגמות מכטרוניקה... (העתק לכאן את כל ההוראות המפורטות שלך)
 """
