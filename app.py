@@ -2,10 +2,9 @@ import streamlit as st
 import google.generativeai as genai
 import time
 import PyPDF2
-from youtube_transcript_api import YouTubeTranscriptApi
-import re
+from PIL import Image
 
-# --- פונקציה לקריאת מאגר השאלות מהקובץ (מהגרסה הקודמת) ---
+# --- פונקציה לקריאת מאגר השאלות מהקובץ ---
 @st.cache_data
 def load_knowledge_base(file_path):
     try:
@@ -16,45 +15,36 @@ def load_knowledge_base(file_path):
                 text += page.extract_text()
             return text
     except FileNotFoundError:
-        st.error(f"שגיאה: הקובץ '{file_path}' לא נמצא במאגר ה-GitHub.")
+        # This error is now less critical as it only affects the chat tab
         return None
     except Exception as e:
         st.error(f"שגיאה בקריאת קובץ ה-PDF: {e}")
         return None
 
-# --- פונקציות חדשות לניתוח יוטיוב ---
-def get_video_id_from_url(url):
-    """Extracts the YouTube video ID from a URL."""
-    # Matches formats: youtube.com/watch?v=... , youtu.be/... , youtube.com/embed/...
-    regex = r"(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
-    match = re.search(regex, url)
-    return match.group(1) if match else None
-
-@st.cache_data
-def get_transcript(video_url):
-    video_id = get_video_id_from_url(video_url)
-    if not video_id:
-        return None, "כתובת ה-URL של הסרטון אינה תקינה."
-    try:
-        # Fetch transcript, prioritizing Hebrew, falling back to English
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['iw', 'en'])
-        transcript_text = " ".join([item['text'] for item in transcript_list])
-        return transcript_text, None
-    except Exception as e:
-        return None, f"לא נמצא תמלול עבור סרטון זה, או שבעל הסרטון חסם את הגישה. (שגיאה: {e})"
-
 # --- הגדרות והוראות לבוט ---
+
+# 1. טעינת הידע מהקובץ שהעלינו ל-GitHub (שם הקובץ עודכן)
 knowledge_base_text = load_knowledge_base("819387ALL_scanned.pdf")
+
+# 2. ההוראות הבסיסיות לבוט (העתק לכאן את כל ההוראות המפורטות שלך)
 BASE_SYSTEM_INSTRUCTION = """
-אתה מורה מומחה למכטרוניקה... (העתק לכאן את כל ההוראות המפורטות שלך)
+אתה מורה מומחה במגמות מכטרוניקה (כיתות י–י"ב) עם שלושה מצבים... (וכו')
 """
+
+# 3. שילוב מאגר הידע בהוראות למערכת
 if knowledge_base_text:
-    SYSTEM_INSTRUCTION = f"{BASE_SYSTEM_INSTRUCTION}\n\n---מאגר ידע קבוע---\n{knowledge_base_text}\n---"
+    SYSTEM_INSTRUCTION = f"""
+    {BASE_SYSTEM_INSTRUCTION}
+    ---
+    **מאגר ידע קבוע:**
+    {knowledge_base_text}
+    ---
+    """
 else:
     SYSTEM_INSTRUCTION = BASE_SYSTEM_INSTRUCTION
 
+
 PAGE_TITLE = "🤖 המורה למכטרוניקה"
-INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי למכטרוניקה. מאגר הידע שלי טעון ומוכן. איך אוכל לעזור?"
 
 # --- הגדרות עמוד ו-UI ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon="🤖", layout="wide")
@@ -69,15 +59,23 @@ try:
         system_instruction=SYSTEM_INSTRUCTION,
         tools=['google_search_retrieval']
     )
+    # Model for image/quiz generation that doesn't need the whole system prompt
+    basic_model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest")
+
 except Exception as e:
     st.error("שגיאה בהגדרת ה-API Key.", icon="🚨")
     st.stop()
 
 # --- הגדרת טאבים (לשוניות) ---
-tab_chat, tab_youtube = st.tabs(["💬 צ'אט עם הבוט", "🎬 ניתוח סרטוני YouTube"])
+tab_chat, tab_image, tab_quiz = st.tabs(["💬 צ'אט עם הבוט", "🖼️ ניתוח תמונות", "🧠 מחולל מבחנים"])
 
 # --- טאב 1: צ'אט רגיל ---
 with tab_chat:
+    st.header("שיחה עם המורה למכטרוניקה")
+    if not knowledge_base_text:
+        st.warning("שים לב: מאגר הידע הקבוע (קובץ ה-PDF) לא נטען. הבוט יפעל על בסיס הידע הכללי שלו וחיפוש באינטרנט.")
+    
+    INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי למכטרוניקה. מאגר הידע שלי טעון ומוכן. איך אוכל לעזור?"
     if "chat" not in st.session_state:
         st.session_state.chat = model.start_chat(history=[])
         st.session_state.messages = [{"role": "assistant", "content": INITIAL_MESSAGE}]
@@ -97,35 +95,56 @@ with tab_chat:
                 full_response = st.write_stream(response_stream)
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-# --- טאב 2: ניתוח יוטיוב ---
-with tab_youtube:
-    st.header("ניתוח סרטוני לימוד מ-YouTube")
-    st.write("הדבק קישור לסרטון, בחר מה תרצה לעשות, והבוט ינתח את התמלול עבורך.")
+# --- טאב 2: ניתוח תמונות ---
+with tab_image:
+    st.header("ניתוח שרטוטים ותמונות")
+    st.info("העלה תמונה של שרטוט טכני, מעגל חשמלי, או רכיב, ושאל את הבוט שאלה לגביה.")
     
-    youtube_url = st.text_input("הדבק כאן קישור לסרטון YouTube:")
-    action_type = st.selectbox(
-        "בחר את הפעולה הרצויה:",
-        ["סיכום הסרטון בנקודות", "יצירת 5 שאלות מבחן על הסרטון", "זיהוי 3 מושגי מפתח והסברם"]
-    )
+    uploaded_image = st.file_uploader("בחר קובץ תמונה", type=["png", "jpg", "jpeg"])
+    image_prompt = st.text_input("מה תרצה לשאול על התמונה?", key="image_q")
 
-    if st.button("🚀 נתח את הסרטון"):
-        if youtube_url:
-            with st.spinner("מוריד ומעבד את תמלול הסרטון..."):
-                transcript, error_message = get_transcript(youtube_url)
-            
-            if error_message:
-                st.error(error_message)
-            else:
-                st.success("התמלול הורד בהצלחה!")
+    if st.button("נתח את התמונה"):
+        if uploaded_image and image_prompt:
+            with st.spinner("מעבד את התמונה ומנתח..."):
+                try:
+                    image_obj = Image.open(uploaded_image)
+                    # Send both text and image to the model
+                    response = basic_model.generate_content([image_prompt, image_obj])
+                    st.subheader("תוצאות הניתוח:")
+                    st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"אירעה שגיאה בעיבוד התמונה: {e}")
+        else:
+            st.warning("אנא העלה תמונה וכתוב שאלה.")
+
+# --- טאב 3: מחולל מבחנים ---
+with tab_quiz:
+    st.header("מחולל מבחנים וחידונים אינטראקטיבי")
+    st.info("הגדר את הפרמטרים הרצויים, והבוט יכין עבורך מבחן מותאם אישית.")
+
+    with st.form("quiz_form"):
+        quiz_topic = st.text_input("נושא המבחן (לדוגמה: 'חוק אוהם ומעגלים טוריים')")
+        num_questions = st.number_input("מספר שאלות", min_value=1, max_value=20, value=5)
+        question_type = st.selectbox("סוג השאלות", ["רב-ברירתיות (אמריקאיות) עם 4 אפשרויות", "שאלות פתוחות", "שאלות נכון / לא נכון"])
+        difficulty = st.select_slider("רמת קושי", options=["יסודית", "בינונית", "מתקדמת"])
+        
+        submitted = st.form_submit_button("🚀 צור את המבחן")
+
+    if submitted:
+        if quiz_topic:
+            with st.spinner(f"מכין מבחן ברמה {difficulty} על {quiz_topic}..."):
+                quiz_prompt = f"""
+                צור מבחן עבור תלמידי מגמת מכטרוניקה.
+                הנושא: {quiz_topic}
+                מספר השאלות: {num_questions}
+                סוג השאלות: {question_type}
+                רמת קושי: {difficulty}
                 
-                prompt_for_analysis = f"בהתבסס על תמלול הסרטון הבא, בצע את המשימה: '{action_type}'.\n\nהתמלול:\n{transcript}"
-                
-                with st.spinner("הבינה המלאכותית מנתחת את התוכן..."):
-                    # For one-off tasks like this, using generate_content is often simpler
-                    analysis_model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest")
-                    response = analysis_model.generate_content(prompt_for_analysis)
-                
-                st.subheader("תוצאות הניתוח:")
+                הצג את המבחן בפורמט Markdown, כולל כותרת ברורה.
+                אם השאלות הן רב-ברירתיות, הצג 4 אפשרויות וסמן את התשובה הנכונה בסוף המבחן (בקטע נפרד של "מחוון תשובות").
+                """
+                response = basic_model.generate_content(quiz_prompt)
+                st.subheader(f"מבחן בנושא: {quiz_topic}")
                 st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
         else:
-            st.warning("אנא הדבק קישור לסרטון.")
+            st.warning("אנא הזн נושא למבחן.")
