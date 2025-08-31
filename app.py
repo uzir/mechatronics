@@ -2,8 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 import time
 
-# ============== זה החלק שהחלפנו ==============
-# 1. אלו ההוראות החדשות עבור המורה למכטרוניקה.
+# ============== זה החלק ששדרגנו ==============
+# 1. הוספנו הוראה המאפשרת לבוט לגשת לאינטרנט.
 # 2. שינינו את הכותרת והודעת הפתיחה.
 
 SYSTEM_INSTRUCTION = """
@@ -24,25 +24,41 @@ SYSTEM_INSTRUCTION = """
 - אם הטקסט כולל "במצב תלמיד" → הפעל Student Mode.
 - אחרת → Teacher Mode.
 
-הערה חשובה: אין לך יכולת לגשת לקבצים חיצוניים או ליצור קבצי PDF. אם משתמש מבקש שאלה מתוך קובץ בגרות, הסבר לו בנימוס שאינך יכול להפיק קובץ PDF, אך אתה יכול לספק לו את תוכן השאלה והפתרון כטקסט אם הוא יספק לך את השאלה.
+**יכולות מיוחדות: באפשרותך לגשת לאינטרנט כדי לחפש מידע עדכני, כגון בחינות בגרות, מאמרים טכניים וחדשות. השתמש ביכולת זו כדי לספק תשובות מדויקות ומבוססות יותר.**
 """
 
-PAGE_TITLE = "🤖 המורה למכטרוניקה"
-INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי שלכם למכטרוניקה. באיזה נושא תרצו להתחיל? ובאיזו רמה (כיתה י', י\"א או י\"ב)?"
+PAGE_TITLE = "🤖 המורה למכטרוניקה (עם גישה לרשת)"
+INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי שלכם למכטרוניקה. אני יכול גם לחפש מידע עדכני ברשת. איך אוכל לעזור?"
 
 # =======================================================
 
 
 # הגדרות עמוד
-st.set_page_config(page_title=PAGE_TITLE, page_icon="🤖")
+st.set_page_config(page_title=PAGE_TITLE, page_icon="🤖", layout="wide")
+
+# הוספת CSS לכיוון RTL כללי באפליקציה
+st.markdown("""
+<style>
+    body {
+        direction: rtl;
+    }
+    .stTextInput > div > div > input {
+        direction: rtl;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
 st.title(PAGE_TITLE)
 
 # הגדרות API Key (באמצעות 'סודות' של Streamlit)
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    # === הוספנו כאן גישה לכלי חיפוש ===
     model = genai.GenerativeModel(
         model_name="gemini-1.5-pro-latest",
-        system_instruction=SYSTEM_INSTRUCTION
+        system_instruction=SYSTEM_INSTRUCTION,
+        tools=['google_search_retrieval'] # הפעלת כלי חיפוש גוגל
     )
 except Exception as e:
     st.error("שגיאה בהגדרת ה-API Key. אנא ודא שהוספת אותו כראוי ב'סודות' של האפליקציה.", icon="🚨")
@@ -54,7 +70,8 @@ if "chat" not in st.session_state:
     st.session_state.chat = model.start_chat(history=[])
     # הצגת הודעת פתיחה ראשונית מהבוט
     with st.chat_message("assistant"):
-        st.markdown(INITIAL_MESSAGE)
+        # === הוספנו כאן תמיכה ב-RTL ===
+        st.markdown(f'<div style="direction: rtl;">{INITIAL_MESSAGE}</div>', unsafe_allow_html=True)
     # שמירת הודעת הפתיחה בהיסטוריה
     st.session_state.messages = [{"role": "assistant", "content": INITIAL_MESSAGE}]
 
@@ -62,20 +79,23 @@ if "chat" not in st.session_state:
 # הצגת הודעות קודמות מההיסטוריה
 for message in st.session_state.get("messages", []):
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        # === הוספנו כאן תמיכה ב-RTL ===
+        st.markdown(f'<div style="direction: rtl;">{message["content"]}</div>', unsafe_allow_html=True)
 
 # קבלת קלט מהמשתמש
 if prompt := st.chat_input("כתבו כאן את שאלתכם..."):
     # הוספת הודעת המשתמש להיסטוריה ולהצגה
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.markdown(prompt)
+        # === הוספנו כאן תמיכה ב-RTL ===
+        st.markdown(f'<div style="direction: rtl;">{prompt}</div>', unsafe_allow_html=True)
 
     # שליחת ההודעה למודל וקבלת תשובה
-    with st.spinner("חושב..."):
+    with st.spinner("חושב וגם מחפש ברשת..."):
         response = st.session_state.chat.send_message(prompt)
 
     # הצגת תשובת הבוט והוספתה להיסטוריה
     with st.chat_message("assistant"):
-        st.markdown(response.text)
+        # === הוספנו כאן תמיכה ב-RTL ===
+        st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
     st.session_state.messages.append({"role": "assistant", "content": response.text})
