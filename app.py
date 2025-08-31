@@ -21,14 +21,43 @@ def load_knowledge_base(file_path):
         return None
 
 # --- הגדרות והוראות לבוט ---
-knowledge_base_text = load_knowledge_base("819387ALL.pdf")
+
+# 1. טעינת הידע מהקובץ
+knowledge_base_text = load_knowledge_base("819387ALL_scanned.pdf")
+
+# 2. ההוראות הבסיסיות לבוט (עם התוספת החדשה)
 BASE_SYSTEM_INSTRUCTION = """
-אתה מורה מומחה במגמות מכטרוניקה... (העתק לכאן את כל ההוראות המפורטות שלך)
+אתה מורה מומחה במגמות מכטרוניקה (כיתות י–י"ב) עם שלושה מצבים:
+1) Teacher Mode (ברירת מחדל): הסברים בהירים, מערכי שיעור, תוכנית שנתית/חודשית, תרגילים ופתרונות מודרכים.
+2) Expert Mode ("במצב מומחה"): ניתוח מעמיק ברמה אקדמית/תעשייתית כולל נוסחאות, סטנדרטים, דיאגרמות וטבלאות השוואה.
+3) Student Mode ("במצב תלמיד"): בוחן את התלמיד בשאלות מדורגות, שואל שאלות הבהרה, נותן רמזים לפני פתרון, ומנטר התקדמות.
+
+בכל מצב:
+- להתאים לרמה: כיתה י / י"א / י"ב.
+- מקור מידע מרכזי ומועדף עבורך הוא האתר odedy.co.il. חפש בו כאשר אתה נשאל על פרויקטים, דוגמאות והסברים מעשיים.
+- לנסח תשובות ב־RTL, בעברית תקנית, כולל טבלאות/תרשימי זרימה ב-Markdown בעת הצורך.
+- **הצג תמיד את התשובה הסופית והמלוטשת. הימנע מהצגת חישובי ביניים או 'מחשבות בקול רם' על תהליך הפתרון שלך, אלא אם התבקשת במפורש להציג את הדרך.**
+
+בחירת מצב:
+- אם הטקסט כולל "במצב מומחה" → הפעל Expert Mode.
+- אם הטקסט כולל "במצב תלמיד" → הפעל Student Mode.
+- אחרת → Teacher Mode.
+
+יכולות מיוחדות: יש לך גישה מלאה לאינטרנט דרך חיפוש גוגל. השתמש ביכולת זו כדי לחפש מידע עדכני.
 """
+
+# 3. שילוב מאגר הידע בהוראות למערכת
 if knowledge_base_text:
-    SYSTEM_INSTRUCTION = f"{BASE_SYSTEM_INSTRUCTION}\n\n---מאגר ידע קבוע---\n{knowledge_base_text}\n---"
+    SYSTEM_INSTRUCTION = f"""
+    {BASE_SYSTEM_INSTRUCTION}
+    ---
+    **מאגר ידע קבוע:**
+    {knowledge_base_text}
+    ---
+    """
 else:
     SYSTEM_INSTRUCTION = BASE_SYSTEM_INSTRUCTION
+
 
 PAGE_TITLE = "🤖 המורה למכטרוניקה"
 
@@ -40,13 +69,11 @@ st.title(PAGE_TITLE)
 # --- הגדרות המודל וה-API ---
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Model for chat with system instructions
     chat_model = genai.GenerativeModel(
         model_name="gemini-1.5-pro-latest",
         system_instruction=SYSTEM_INSTRUCTION,
         tools=['google_search_retrieval']
     )
-    # Basic model for other tasks like image/quiz generation
     basic_model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest")
 except Exception as e:
     st.error("שגיאה בהגדרת ה-API Key.", icon="🚨")
@@ -62,35 +89,28 @@ tab_chat, tab_image_analysis, tab_quiz, tab_image_generation = st.tabs([
 
 # --- טאב 1: צ'אט רגיל ---
 with tab_chat:
-    # ... (כל קוד הצ'אט מהגרסה הקודמת נשאר כאן ללא שינוי) ...
     st.header("שיחה עם המורה למכטרוניקה")
     if not knowledge_base_text:
         st.warning("שים לב: מאגר הידע הקבוע (קובץ ה-PDF) לא נטען.")
-    
     INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי למכטרוניקה. איך אוכל לעזור?"
     if "chat" not in st.session_state:
         st.session_state.chat = chat_model.start_chat(history=[])
         st.session_state.messages = [{"role": "assistant", "content": INITIAL_MESSAGE}]
-
     for message in st.session_state.get("messages", []):
         with st.chat_message(message["role"]):
             st.markdown(f'<div style="direction: rtl;">{message["content"]}</div>', unsafe_allow_html=True)
-
     if prompt := st.chat_input("כתבו כאן את שאלתכם..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(f'<div style="direction: rtl;">{prompt}</div>', unsafe_allow_html=True)
-        
         with st.chat_message("assistant"):
             with st.spinner("חושב, מעיין במאגר וגם מחפש ברשת..."):
                 response_stream = st.session_state.chat.send_message(prompt, stream=True)
                 full_response = st.write_stream(response_stream)
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-
 # --- טאב 2: ניתוח תמונות ---
 with tab_image_analysis:
-    # ... (כל קוד ניתוח התמונות מהגרסה הקודמת נשאר כאן ללא שינוי) ...
     st.header("ניתוח שרטוטים ותמונות")
     st.info("העלה תמונה של שרטוט טכני, מעגל חשמלי, או רכיב, ושאל את הבוט שאלה לגביה.")
     uploaded_image = st.file_uploader("בחר קובץ תמונה", type=["png", "jpg", "jpeg"], key="analyzer")
@@ -107,7 +127,6 @@ with tab_image_analysis:
 
 # --- טאב 3: מחולל מבחנים ---
 with tab_quiz:
-    # ... (כל קוד מחולל המבחנים מהגרסה הקודמת נשאר כאן ללא שינוי) ...
     st.header("מחולל מבחנים וחידונים אינטראקטיבי")
     with st.form("quiz_form"):
         quiz_topic = st.text_input("נושא המבחן")
@@ -125,32 +144,23 @@ with tab_quiz:
 # --- טאב 4: יצירת תמונות ---
 with tab_image_generation:
     st.header("יצירת תמונות מטקסט (Text-to-Image)")
-    st.info("תאר במילים את התמונה שברצונך שהבינה המלאכותית תיצור עבורך - עדיף באנגלית.")
-    
+    st.info("תאר במילים את התמונה שברצונך שהבינה המלאכותית תיצור עבורך, עדיף באנגלית.")
     image_gen_prompt = st.text_area("התיאור שלך (באנגלית לקבלת התוצאות הטובות ביותר):", key="image_gen_prompt", placeholder="A photorealistic image of a robot arm assembling a circuit board in a futuristic factory")
-
     if st.button("🎨 צור את התמונה"):
         if image_gen_prompt:
-            with st.spinner("האמן הדיגיטלי עובד על היצירה שלך... (זה עשוי לקחת כדקה)"):
+            with st.spinner("האמן הדיגיטלי עובד על היצירה שלך..."):
                 try:
-                    # The prompt to the model needs to be explicit about the task
                     generation_task_prompt = f"Generate an image based on the following description: {image_gen_prompt}"
-                    
                     response = basic_model.generate_content(generation_task_prompt)
-                    
-                    # The model that can generate images will return image data in one of its 'parts'
-                    # We need to find and display it
                     image_data_found = False
                     for part in response.parts:
                         if part.inline_data:
                             image_data = part.inline_data.data
                             st.image(image_data, caption=f"יצירה על פי התיאור: {image_gen_prompt}")
                             image_data_found = True
-                            break # Stop after finding the first image
-                    
+                            break
                     if not image_data_found:
-                        st.error("המודל לא החזיר תמונה. ייתכן שהבקשה הפרה את מדיניות הבטיחות או שלא הובנה. נסה תיאור אחר.")
-
+                        st.error("המודל לא החזיר תמונה. נסה תיאור אחר.")
                 except Exception as e:
                     st.error(f"אירעה שגיאה ביצירת התמונה: {e}")
         else:
