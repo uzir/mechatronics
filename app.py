@@ -44,7 +44,7 @@ def get_transcript(video_url):
         return None, f"לא נמצא תמלול עבור סרטון זה, או שבעל הסרטון חסם את הגישה. (שגיאה: {e})"
 
 # --- הגדרות והוראות לבוט ---
-knowledge_base_text = load_knowledge_base("maagar_sheelot.pdf")
+knowledge_base_text = load_knowledge_base("819387ALL_scanned.pdf")
 BASE_SYSTEM_INSTRUCTION = """
 אתה מורה מומחה למכטרוניקה... (העתק לכאן את כל ההוראות המפורטות שלך)
 """
