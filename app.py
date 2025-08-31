@@ -1,12 +1,17 @@
 import streamlit as st
 import google.generativeai as genai
-import time
 import PyPDF2
 from PIL import Image
+from pptx import Presentation
+from pptx.util import Inches
+from pptx.enum.text import PP_ALIGN
+import io
 
-# --- פונקציה לקריאת מאגר השאלות מהקובץ ---
+# --- פונקציות עזר ---
+
 @st.cache_data
 def load_knowledge_base(file_path):
+    """קוראת תוכן מקובץ PDF ומחזירה אותו כטקסט."""
     try:
         with open(file_path, "rb") as pdf_file:
             pdf_reader = PyPDF2.PdfReader(pdf_file)
@@ -20,12 +25,43 @@ def load_knowledge_base(file_path):
         st.error(f"שגיאה בקריאת קובץ ה-PDF: {e}")
         return None
 
+def create_presentation_from_text(text_content):
+    """יוצרת מצגת PowerPoint מטקסט מובנה ומחזירה אותה כבייטים להורדה."""
+    prs = Presentation()
+    slides_text = text_content.strip().split("\n\n")
+
+    for slide_text in slides_text:
+        lines = slide_text.strip().split('\n')
+        if not lines: continue
+
+        title = lines[0].replace("#", "").strip()
+        content_points = [line.replace("-", "").strip() for line in lines[1:] if line.strip().startswith("-")]
+
+        slide_layout = prs.slide_layouts[5]  # Title and Content layout
+        slide = prs.slides.add_slide(slide_layout)
+        
+        title_shape = slide.shapes.title
+        title_shape.text = title
+        title_shape.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
+        
+        content_shape = slide.shapes.placeholders[1]
+        tf = content_shape.text_frame
+        tf.clear()
+        
+        for point in content_points:
+            p = tf.add_paragraph()
+            p.text = point
+            p.alignment = PP_ALIGN.RIGHT
+            p.level = 0
+            
+    bio = io.BytesIO()
+    prs.save(bio)
+    return bio.getvalue()
+
 # --- הגדרות והוראות לבוט ---
 
-# 1. טעינת הידע מהקובץ
 knowledge_base_text = load_knowledge_base("819387ALL_scanned.pdf")
 
-# 2. ההוראות הבסיסיות לבוט (עם התוספת החדשה)
 BASE_SYSTEM_INSTRUCTION = """
 אתה מורה מומחה במגמות מכטרוניקה (כיתות י–י"ב) עם שלושה מצבים:
 1) Teacher Mode (ברירת מחדל): הסברים בהירים, מערכי שיעור, תוכנית שנתית/חודשית, תרגילים ופתרונות מודרכים.
@@ -36,7 +72,7 @@ BASE_SYSTEM_INSTRUCTION = """
 - להתאים לרמה: כיתה י / י"א / י"ב.
 - מקור מידע מרכזי ומועדף עבורך הוא האתר odedy.co.il. חפש בו כאשר אתה נשאל על פרויקטים, דוגמאות והסברים מעשיים.
 - לנסח תשובות ב־RTL, בעברית תקנית, כולל טבלאות/תרשימי זרימה ב-Markdown בעת הצורך.
-- **הצג תמיד את התשובה הסופית והמלוטשת. הימנע מהצגת חישובי ביניים או 'מחשבות בקול רם' על תהליך הפתרון שלך, אלא אם התבקשת במפורש להציג את הדרך.**
+- הצג תמיד את התשובה הסופית והמלוטשת. הימנע מהצגת חישובי ביניים או 'מחשבות בקול רם' על תהליך הפתרון שלך, אלא אם התבקשת במפורש להציג את הדרך.
 
 בחירת מצב:
 - אם הטקסט כולל "במצב מומחה" → הפעל Expert Mode.
@@ -46,18 +82,10 @@ BASE_SYSTEM_INSTRUCTION = """
 יכולות מיוחדות: יש לך גישה מלאה לאינטרנט דרך חיפוש גוגל. השתמש ביכולת זו כדי לחפש מידע עדכני.
 """
 
-# 3. שילוב מאגר הידע בהוראות למערכת
 if knowledge_base_text:
-    SYSTEM_INSTRUCTION = f"""
-    {BASE_SYSTEM_INSTRUCTION}
-    ---
-    **מאגר ידע קבוע:**
-    {knowledge_base_text}
-    ---
-    """
+    SYSTEM_INSTRUCTION = f"{BASE_SYSTEM_INSTRUCTION}\n\n---מאגר ידע קבוע---\n{knowledge_base_text}\n---"
 else:
     SYSTEM_INSTRUCTION = BASE_SYSTEM_INSTRUCTION
-
 
 PAGE_TITLE = "🤖 המורה למכטרוניקה"
 
@@ -69,40 +97,41 @@ st.title(PAGE_TITLE)
 # --- הגדרות המודל וה-API ---
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    chat_model = genai.GenerativeModel(
-        model_name="gemini-1.5-pro-latest",
-        system_instruction=SYSTEM_INSTRUCTION,
-        tools=['google_search_retrieval']
-    )
+    chat_model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest", system_instruction=SYSTEM_INSTRUCTION, tools=['google_search_retrieval'])
     basic_model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest")
 except Exception as e:
-    st.error("שגיאה בהגדרת ה-API Key.", icon="🚨")
+    st.error("שגיאה בהגדרת ה-API Key. אנא ודא שהוספת אותו כראוי ב'סודות' האפליקציה.", icon="🚨")
     st.stop()
 
 # --- הגדרת טאבים (לשוניות) ---
-tab_chat, tab_image_analysis, tab_quiz, tab_image_generation = st.tabs([
+tabs = st.tabs([
     "💬 צ'אט עם הבוט", 
     "🖼️ ניתוח תמונות", 
     "🧠 מחולל מבחנים",
-    "🎨 יצירת תמונות"
+    "🎨 יצירת תמונות",
+    "📊 מחולל מצגות"
 ])
 
 # --- טאב 1: צ'אט רגיל ---
-with tab_chat:
+with tabs[0]:
     st.header("שיחה עם המורה למכטרוניקה")
     if not knowledge_base_text:
-        st.warning("שים לב: מאגר הידע הקבוע (קובץ ה-PDF) לא נטען.")
-    INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי למכטרוניקה. איך אוכל לעזור?"
+        st.warning("שים לב: מאגר הידע הקבוע (קובץ ה-PDF) לא נטען. הבוט יפעל על בסיס הידע הכללי שלו וחיפוש באינטרנט.")
+    
+    INITIAL_MESSAGE = "שלום, אני המורה הדיגיטלי למכטרוניקה. מאגר הידע שלי טעון ומוכן. איך אוכל לעזור?"
     if "chat" not in st.session_state:
         st.session_state.chat = chat_model.start_chat(history=[])
         st.session_state.messages = [{"role": "assistant", "content": INITIAL_MESSAGE}]
+
     for message in st.session_state.get("messages", []):
         with st.chat_message(message["role"]):
             st.markdown(f'<div style="direction: rtl;">{message["content"]}</div>', unsafe_allow_html=True)
+
     if prompt := st.chat_input("כתבו כאן את שאלתכם..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(f'<div style="direction: rtl;">{prompt}</div>', unsafe_allow_html=True)
+        
         with st.chat_message("assistant"):
             with st.spinner("חושב, מעיין במאגר וגם מחפש ברשת..."):
                 response_stream = st.session_state.chat.send_message(prompt, stream=True)
@@ -110,26 +139,31 @@ with tab_chat:
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # --- טאב 2: ניתוח תמונות ---
-with tab_image_analysis:
+with tabs[1]:
     st.header("ניתוח שרטוטים ותמונות")
     st.info("העלה תמונה של שרטוט טכני, מעגל חשמלי, או רכיב, ושאל את הבוט שאלה לגביה.")
+    
     uploaded_image = st.file_uploader("בחר קובץ תמונה", type=["png", "jpg", "jpeg"], key="analyzer")
     image_prompt = st.text_input("מה תרצה לשאול על התמונה?", key="image_q")
-    if st.button("נתח את התמונה"):
+
+    if st.button("נתח את התמונה", key="analyze_btn"):
         if uploaded_image and image_prompt:
             with st.spinner("מעבד את התמונה ומנתח..."):
-                image_obj = Image.open(uploaded_image)
-                response = basic_model.generate_content([image_prompt, image_obj])
-                st.subheader("תוצאות הניתוח:")
-                st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
+                try:
+                    image_obj = Image.open(uploaded_image)
+                    response = basic_model.generate_content([image_prompt, image_obj])
+                    st.subheader("תוצאות הניתוח:")
+                    st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"אירעה שגיאה בעיבוד התמונה: {e}")
         else:
             st.warning("אנא העלה תמונה וכתוב שאלה.")
 
 # --- טאב 3: מחולל מבחנים ---
-with tab_quiz:
-    st.header("מחולל מבחנים וחידונים אינטראקטיבי")
+with tabs[2]:
+    st.header("מחולל מבחנים וחידונים")
     with st.form("quiz_form"):
-        quiz_topic = st.text_input("נושא המבחן")
+        quiz_topic = st.text_input("נושא המבחן", placeholder="לדוגמה: 'חוק אוהם'")
         num_questions = st.number_input("מספר שאלות", min_value=1, max_value=20, value=5)
         question_type = st.selectbox("סוג השאלות", ["רב-ברירתיות (אמריקאיות)", "פתוחות", "נכון / לא נכון"])
         difficulty = st.select_slider("רמת קושי", options=["קלה", "בינונית", "קשה"])
@@ -142,26 +176,47 @@ with tab_quiz:
             st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
 
 # --- טאב 4: יצירת תמונות ---
-with tab_image_generation:
-    st.header("יצירת תמונות מטקסט (Text-to-Image)")
-    st.info("תאר במילים את התמונה שברצונך שהבינה המלאכותית תיצור עבורך, עדיף באנגלית.")
-    image_gen_prompt = st.text_area("התיאור שלך (באנגלית לקבלת התוצאות הטובות ביותר):", key="image_gen_prompt", placeholder="A photorealistic image of a robot arm assembling a circuit board in a futuristic factory")
-    if st.button("🎨 צור את התמונה"):
+with tabs[3]:
+    st.header("יצירת תמונות מטקסט")
+    st.info("תאר במילים את התמונה שברצונך שהבינה המלאכותית תיצור עבורך.")
+    image_gen_prompt = st.text_area("התיאור שלך (באנגלית לקבלת התוצאות הטובות ביותר):", key="image_gen_prompt", placeholder="A photorealistic robot arm...")
+    if st.button("🎨 צור את התמונה", key="generate_btn"):
         if image_gen_prompt:
-            with st.spinner("האמן הדיגיטלי עובד על היצירה שלך..."):
+            with st.spinner("יוצר תמונה..."):
                 try:
-                    generation_task_prompt = f"Generate an image based on the following description: {image_gen_prompt}"
-                    response = basic_model.generate_content(generation_task_prompt)
-                    image_data_found = False
-                    for part in response.parts:
-                        if part.inline_data:
-                            image_data = part.inline_data.data
-                            st.image(image_data, caption=f"יצירה על פי התיאור: {image_gen_prompt}")
-                            image_data_found = True
-                            break
-                    if not image_data_found:
-                        st.error("המודל לא החזיר תמונה. נסה תיאור אחר.")
-                except Exception as e:
-                    st.error(f"אירעה שגיאה ביצירת התמונה: {e}")
+                    response = basic_model.generate_content(f"Generate an image of: {image_gen_prompt}")
+                    st.image(response.parts[0].inline_data.data, caption=image_gen_prompt)
+                except Exception:
+                    st.error("המודל לא החזיר תמונה. נסה תיאור אחר.")
         else:
             st.warning("אנא הזн תיאור לתמונה.")
+
+# --- טאב 5: מחולל מצגות ---
+with tabs[4]:
+    st.header("מחולל מצגות PowerPoint")
+    st.info("הגדר את נושא המצגת, והבוט ייצור עבורך קובץ להורדה.")
+
+    with st.form("ppt_form"):
+        ppt_topic = st.text_input("נושא המצגת", placeholder="לדוגמה: 'מבוא לבקרי PLC'")
+        slide_count = st.number_input("מספר שקופיות", min_value=3, max_value=20, value=7)
+        target_audience = st.text_input("קהל יעד", placeholder="לדוגמה: 'תלמידי כיתה י\"א'")
+        submitted = st.form_submit_button("📊 צור מצגת")
+
+    if submitted and ppt_topic:
+        with st.spinner(f"כותב תוכן למצגת..."):
+            ppt_prompt = f"צור תוכן למצגת PowerPoint בנושא '{ppt_topic}' לקהל יעד של '{target_audience}'. המצגת צריכה לכלול {slide_count} שקופיות. החזר את התוכן בפורמט Markdown. כל שקופית תתחיל בכותרת עם #. כל נקודה תתחיל עם -. הפרד בין שקופיות בשורה כפולה."
+            response = basic_model.generate_content(ppt_prompt)
+            presentation_text = response.text
+
+        with st.spinner("בונה קובץ PowerPoint..."):
+            ppt_file_data = create_presentation_from_text(presentation_text)
+        
+        st.success("המצגת מוכנה להורדה!")
+        st.download_button(
+            label="📥 הורד את המצגת (.pptx)",
+            data=ppt_file_data,
+            file_name=f"{ppt_topic.replace(' ', '_')}.pptx",
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
+        with st.expander("הצג תוכן טקסטואלי"):
+            st.markdown(f'<div style="direction: rtl; text-align: right;">{presentation_text}</div>', unsafe_allow_html=True)
