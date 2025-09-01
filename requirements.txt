@@ -3,4 +3,3 @@ google-generativeai
 pypdf2
 Pillow
 python-pptx
-from pptx.util import Pt
