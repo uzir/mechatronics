@@ -192,31 +192,57 @@ with tabs[3]:
             st.warning("אנא הזн תיאור לתמונה.")
 
 # --- טאב 5: מחולל מצגות ---
+# --- טאב 5: מחולל מצגות (עם הנחיות מותאמות אישית) ---
 with tabs[4]:
     st.header("מחולל מצגות PowerPoint")
-    st.info("הגדר את נושא המצגת, והבוט ייצור עבורך קובץ להורדה.")
+    st.info("הגדר את נושא המצגת, הוסף בקשות מיוחדות, והבינה המלאכותית תיצור עבורך קובץ להורדה.")
 
     with st.form("ppt_form"):
         ppt_topic = st.text_input("נושא המצגת", placeholder="לדוגמה: 'מבוא לבקרי PLC'")
         slide_count = st.number_input("מספר שקופיות", min_value=3, max_value=20, value=7)
         target_audience = st.text_input("קהל יעד", placeholder="לדוגמה: 'תלמידי כיתה י\"א'")
+        
+        # <<< הוספנו תיבת טקסט להנחיות נוספות >>>
+        additional_instructions = st.text_area(
+            "הנחיות נוספות או בקשות מיוחדות:",
+            placeholder="לדוגמה: 'התמקד ביישומים תעשייתיים', 'הוסף שקופית על היסטוריית הנושא', 'שלב אנלוגיה פשוטה להסבר המושג המרכזי'"
+        )
+        
         submitted = st.form_submit_button("📊 צור מצגת")
 
-    if submitted and ppt_topic:
-        with st.spinner(f"כותב תוכן למצגת..."):
-            ppt_prompt = f"צור תוכן למצגת PowerPoint בנושא '{ppt_topic}' לקהל יעד של '{target_audience}'. המצגת צריכה לכלול {slide_count} שקופיות. החזר את התוכן בפורמט Markdown. כל שקופית תתחיל בכותרת עם #. כל נקודה תתחיל עם -. הפרד בין שקופיות בשורה כפולה."
-            response = basic_model.generate_content(ppt_prompt)
-            presentation_text = response.text
+    if submitted:
+        if ppt_topic and target_audience:
+            with st.spinner(f"כותב את תוכן המצגת על '{ppt_topic}'..."):
+                # <<< שדרגנו את הפרומפט כך שיכלול את ההנחיות החדשות >>>
+                ppt_prompt = f"""
+                צור תוכן עבור מצגת PowerPoint בנושא '{ppt_topic}' המיועדת ל'{target_audience}'.
+                המצגת צריכה לכלול כ-{slide_count} שקופיות.
+                """
+                
+                if additional_instructions:
+                    ppt_prompt += f"\nהנחיות נוספות מהמשתמש שיש להתייחס אליהן: {additional_instructions}"
 
-        with st.spinner("בונה קובץ PowerPoint..."):
-            ppt_file_data = create_presentation_from_text(presentation_text)
-        
-        st.success("המצגת מוכנה להורדה!")
-        st.download_button(
-            label="📥 הורד את המצגת (.pptx)",
-            data=ppt_file_data,
-            file_name=f"{ppt_topic.replace(' ', '_')}.pptx",
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        )
-        with st.expander("הצג תוכן טקסטואלי"):
-            st.markdown(f'<div style="direction: rtl; text-align: right;">{presentation_text}</div>', unsafe_allow_html=True)
+                ppt_prompt += """
+                \nהחזר את התוכן בפורמט Markdown ברור. כל שקופית תתחיל בכותרת עם סימן #.
+                כל נקודה בתוך שקופית תתחיל עם סימן -.
+                הפרד בין כל שקופית לשקופית באמצעות שורת רווח כפולה.
+                """
+                response = basic_model.generate_content(ppt_prompt)
+                presentation_text = response.text
+
+            with st.spinner("בונה את קובץ ה-PowerPoint..."):
+                ppt_file_data = create_presentation_from_text(presentation_text)
+            
+            st.success("המצגת שלך מוכנה להורדה!")
+            st.download_button(
+                label="📥 הורד את המצגת (.pptx)",
+                data=ppt_file_data,
+                file_name=f"{ppt_topic.replace(' ', '_')}.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
+            st.balloons() # חגיגה קטנה :)
+            
+            with st.expander("הצג את התוכן הטקסטואלי של המצגת"):
+                st.markdown(f'<div style="direction: rtl; text-align: right;">{presentation_text}</div>', unsafe_allow_html=True)
+        else:
+            st.warning("אנא מלא את נושא המצגת וקהל היעד.")
