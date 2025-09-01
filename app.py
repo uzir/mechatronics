@@ -25,39 +25,51 @@ def load_knowledge_base(file_path):
         st.error(f"שגיאה בקריאת קובץ ה-PDF: {e}")
         return None
 
+# --- פונקציה מתוקנת ליצירת מצגת (עם תמיכה מלאה ב-RTL ובחירת תבנית חכמה) ---
 def create_presentation_from_text(text_content):
-    """יוצרת מצגת PowerPoint מטקסט מובנה ומחזירה אותה כבייטים להורדה."""
     prs = Presentation()
     slides_text = text_content.strip().split("\n\n")
 
+    # הגדרת אינדקסים לתבניות נפוצות
+    TITLE_AND_CONTENT_LAYOUT = 1
+    TITLE_ONLY_LAYOUT = 5
+
     for slide_text in slides_text:
         lines = slide_text.strip().split('\n')
-        if not lines: continue
+        if not lines or not lines[0]: continue
 
         title = lines[0].replace("#", "").strip()
         content_points = [line.replace("-", "").strip() for line in lines[1:] if line.strip().startswith("-")]
 
-        slide_layout = prs.slide_layouts[5]  # Title and Content layout
-        slide = prs.slides.add_slide(slide_layout)
+        # --- התיקון המרכזי: בחירת תבנית דינמית ---
+        if content_points:
+            slide_layout = prs.slide_layouts[TITLE_AND_CONTENT_LAYOUT]
+            slide = prs.slides.add_slide(slide_layout)
+            
+            # טיפול בתוכן רק אם הוא קיים
+            content_shape = slide.shapes.placeholders[1]
+            tf = content_shape.text_frame
+            tf.clear()
+            
+            for point in content_points:
+                p = tf.add_paragraph()
+                p.text = point
+                p.alignment = PP_ALIGN.RIGHT
+                p.level = 0
+        else:
+            # אם אין נקודות תוכן, השתמש בתבנית של כותרת בלבד
+            slide_layout = prs.slide_layouts[TITLE_ONLY_LAYOUT]
+            slide = prs.slides.add_slide(slide_layout)
         
+        # טיפול בכותרת (משותף לשתי התבניות)
         title_shape = slide.shapes.title
         title_shape.text = title
         title_shape.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
-        
-        content_shape = slide.shapes.placeholders[1]
-        tf = content_shape.text_frame
-        tf.clear()
-        
-        for point in content_points:
-            p = tf.add_paragraph()
-            p.text = point
-            p.alignment = PP_ALIGN.RIGHT
-            p.level = 0
             
+    # שמירת המצגת
     bio = io.BytesIO()
     prs.save(bio)
     return bio.getvalue()
-
 # --- הגדרות והוראות לבוט ---
 
 knowledge_base_text = load_knowledge_base("819387ALL.pdf")
