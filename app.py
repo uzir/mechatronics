@@ -26,11 +26,11 @@ def load_knowledge_base(file_path):
         return None
 
 # --- פונקציה מתוקנת ליצירת מצגת (עם תמיכה מלאה ב-RTL ובחירת תבנית חכמה) ---
+# --- פונקציה מעודכנת ליצירת מצגת (עם שליטה על גודל פונט ו-RTL) ---
 def create_presentation_from_text(text_content):
     prs = Presentation()
     slides_text = text_content.strip().split("\n\n")
 
-    # הגדרת אינדקסים לתבניות נפוצות
     TITLE_AND_CONTENT_LAYOUT = 1
     TITLE_ONLY_LAYOUT = 5
 
@@ -41,12 +41,10 @@ def create_presentation_from_text(text_content):
         title = lines[0].replace("#", "").strip()
         content_points = [line.replace("-", "").strip() for line in lines[1:] if line.strip().startswith("-")]
 
-        # --- התיקון המרכזי: בחירת תבנית דינמית ---
         if content_points:
             slide_layout = prs.slide_layouts[TITLE_AND_CONTENT_LAYOUT]
             slide = prs.slides.add_slide(slide_layout)
             
-            # טיפול בתוכן רק אם הוא קיים
             content_shape = slide.shapes.placeholders[1]
             tf = content_shape.text_frame
             tf.clear()
@@ -55,21 +53,24 @@ def create_presentation_from_text(text_content):
                 p = tf.add_paragraph()
                 p.text = point
                 p.alignment = PP_ALIGN.RIGHT
+                p.font.size = Pt(20) # <<< הקטנת פונט התוכן >>>
                 p.level = 0
         else:
-            # אם אין נקודות תוכן, השתמש בתבנית של כותרת בלבד
             slide_layout = prs.slide_layouts[TITLE_ONLY_LAYOUT]
             slide = prs.slides.add_slide(slide_layout)
         
-        # טיפול בכותרת (משותף לשתי התבניות)
         title_shape = slide.shapes.title
         title_shape.text = title
-        title_shape.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
+        
+        # ודא שהכותרת תמיד מיושרת לימין עם הגודל הנכון
+        title_paragraph = title_shape.text_frame.paragraphs[0]
+        title_paragraph.alignment = PP_ALIGN.RIGHT
+        title_paragraph.font.size = Pt(36) # <<< הקטנת פונט הכותרת >>>
             
-    # שמירת המצגת
     bio = io.BytesIO()
     prs.save(bio)
     return bio.getvalue()
+            
 # --- הגדרות והוראות לבוט ---
 
 knowledge_base_text = load_knowledge_base("819387ALL.pdf")
