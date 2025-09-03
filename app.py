@@ -235,4 +235,7 @@ with tabs[3]:
             )
             st.balloons()
             
-            with st.expander("הצג את התוכן הטקסטואלי של המצגת
+            with st.expander("הצג את התוכן הטקסטואלי של המצגת"):
+                st.markdown(f'<div style="direction: rtl; text-align: right;">{presentation_text}</div>', unsafe_allow_html=True)
+        else:
+            st.warning("אנא מלא את נושא המצגת וקהל היעד.")
