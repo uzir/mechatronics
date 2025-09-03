@@ -6,6 +6,12 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
 import io
+import streamlit as st
+import google.generativeai as genai
+# הוסף את השורה הבאה כאן
+st.title("בדיקה: הקוד החדש נטען בהצלחה!")
+
+
 
 # --- פונקציות עזר ---
 
