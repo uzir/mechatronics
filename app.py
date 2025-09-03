@@ -3,7 +3,7 @@ import google.generativeai as genai
 import PyPDF2
 from PIL import Image
 from pptx import Presentation
-from pptx.util import Inches, Pt  # הוספתי ייבוא של Pt שהיה חסר
+from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
 import io
 
@@ -73,7 +73,6 @@ def create_presentation_from_text(text_content):
 
 knowledge_base_text = load_knowledge_base("819387ALL.pdf")
 
-# --- הנחיה מערכתית מחודדת ---
 BASE_SYSTEM_INSTRUCTION = """
 אתה מורה מומחה במגמות מכטרוניקה (כיתות י–י"ב) עם שלושה מצבים:
 1) Teacher Mode (ברירת מחדל): הסברים בהירים, מערכי שיעור, תוכנית שנתית/חודשית, תרגילים ופתרונות מודרכים.
@@ -116,7 +115,6 @@ except Exception as e:
     st.stop()
 
 # --- הגדרת טאבים (לשוניות) ---
-# --- הטאב של יצירת תמונות הוסר ---
 tabs = st.tabs([
     "💬 צ'אט עם הבוט", 
     "🖼️ ניתוח תמונות", 
@@ -165,6 +163,7 @@ with tabs[1]:
                     image_obj = Image.open(uploaded_image)
                     response = basic_model.generate_content([image_prompt, image_obj])
                     st.subheader("תוצאות הניתוח:")
+                    # שימוש ב-response.text כדי להציג רק את הטקסט
                     st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"אירעה שגיאה בעיבוד התמונה: {e}")
@@ -185,9 +184,10 @@ with tabs[2]:
             quiz_prompt = f"צור מבחן בנושא {quiz_topic}, עם {num_questions} שאלות מסוג {question_type} ברמת קושי {difficulty}."
             response = basic_model.generate_content(quiz_prompt)
             st.subheader(f"מבחן בנושא: {quiz_topic}")
+            # שימוש ב-response.text כדי להציג רק את הטקסט
             st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
 
-# --- טאב 4: מחולל מצגות --- (האינדקס עודכן מ-4 ל-3)
+# --- טאב 4: מחולל מצגות ---
 with tabs[3]:
     st.header("מחולל מצגות PowerPoint")
     st.info("הגדר את נושא המצגת, הוסף בקשות מיוחדות, והבינה המלאכותית תיצור עבורך קובץ להורדה.")
@@ -221,6 +221,7 @@ with tabs[3]:
                 הפרד בין כל שקופית לשקופית באמצעות שורת רווח כפולה.
                 """
                 response = basic_model.generate_content(ppt_prompt)
+                # כאן זה כבר היה נכון: חילוץ הטקסט למשתנה נפרד
                 presentation_text = response.text
 
             with st.spinner("בונה את קובץ ה-PowerPoint..."):
