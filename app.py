@@ -3,7 +3,7 @@ import google.generativeai as genai
 import PyPDF2
 from PIL import Image
 from pptx import Presentation
-from pptx.util import Inches
+from pptx.util import Inches, Pt  # הוספתי ייבוא של Pt שהיה חסר
 from pptx.enum.text import PP_ALIGN
 import io
 
@@ -25,9 +25,8 @@ def load_knowledge_base(file_path):
         st.error(f"שגיאה בקריאת קובץ ה-PDF: {e}")
         return None
 
-# --- פונקציה מתוקנת ליצירת מצגת (עם תמיכה מלאה ב-RTL ובחירת תבנית חכמה) ---
-# --- פונקציה מעודכנת ליצירת מצגת (עם שליטה על גודל פונט ו-RTL) ---
 def create_presentation_from_text(text_content):
+    """יוצרת מצגת PowerPoint על בסיס טקסט בפורמט Markdown."""
     prs = Presentation()
     slides_text = text_content.strip().split("\n\n")
 
@@ -53,7 +52,7 @@ def create_presentation_from_text(text_content):
                 p = tf.add_paragraph()
                 p.text = point
                 p.alignment = PP_ALIGN.RIGHT
-                p.font.size = Pt(20) # <<< הקטנת פונט התוכן >>>
+                p.font.size = Pt(20)
                 p.level = 0
         else:
             slide_layout = prs.slide_layouts[TITLE_ONLY_LAYOUT]
@@ -62,19 +61,19 @@ def create_presentation_from_text(text_content):
         title_shape = slide.shapes.title
         title_shape.text = title
         
-        # ודא שהכותרת תמיד מיושרת לימין עם הגודל הנכון
         title_paragraph = title_shape.text_frame.paragraphs[0]
         title_paragraph.alignment = PP_ALIGN.RIGHT
-        title_paragraph.font.size = Pt(36) # <<< הקטנת פונט הכותרת >>>
+        title_paragraph.font.size = Pt(36)
             
     bio = io.BytesIO()
     prs.save(bio)
     return bio.getvalue()
-            
+
 # --- הגדרות והוראות לבוט ---
 
 knowledge_base_text = load_knowledge_base("819387ALL.pdf")
 
+# --- הנחיה מערכתית מחודדת ---
 BASE_SYSTEM_INSTRUCTION = """
 אתה מורה מומחה במגמות מכטרוניקה (כיתות י–י"ב) עם שלושה מצבים:
 1) Teacher Mode (ברירת מחדל): הסברים בהירים, מערכי שיעור, תוכנית שנתית/חודשית, תרגילים ופתרונות מודרכים.
@@ -85,7 +84,7 @@ BASE_SYSTEM_INSTRUCTION = """
 - להתאים לרמה: כיתה י / י"א / י"ב.
 - מקור מידע מרכזי ומועדף עבורך הוא האתר odedy.co.il. חפש בו כאשר אתה נשאל על פרויקטים, דוגמאות והסברים מעשיים.
 - לנסח תשובות ב־RTL, בעברית תקנית, כולל טבלאות/תרשימי זרימה ב-Markdown בעת הצורך.
-- הצג תמיד את התשובה הסופית והמלוטשת. הימנע מהצגת חישובי ביניים או 'מחשבות בקול רם' על תהליך הפתרון שלך, אלא אם התבקשת במפורש להציג את הדרך.
+- חשוב מאוד: עליך להציג תמיד רק את התשובה הסופית, המלאה והמלוטשת. אל תציג למשתמש את שלבי החשיבה, חישובי הביניים, או כל טקסט אחר שמתאר את תהליך הפתרון הפנימי שלך. הצג רק את התוצר המוגמר.
 
 בחירת מצב:
 - אם הטקסט כולל "במצב מומחה" → הפעל Expert Mode.
@@ -117,11 +116,11 @@ except Exception as e:
     st.stop()
 
 # --- הגדרת טאבים (לשוניות) ---
+# --- הטאב של יצירת תמונות הוסר ---
 tabs = st.tabs([
     "💬 צ'אט עם הבוט", 
     "🖼️ ניתוח תמונות", 
     "🧠 מחולל מבחנים",
-    "🎨 יצירת תמונות",
     "📊 מחולל מצגות"
 ])
 
@@ -188,25 +187,8 @@ with tabs[2]:
             st.subheader(f"מבחן בנושא: {quiz_topic}")
             st.markdown(f'<div style="direction: rtl;">{response.text}</div>', unsafe_allow_html=True)
 
-# --- טאב 4: יצירת תמונות ---
+# --- טאב 4: מחולל מצגות --- (האינדקס עודכן מ-4 ל-3)
 with tabs[3]:
-    st.header("יצירת תמונות מטקסט")
-    st.info("תאר במילים את התמונה שברצונך שהבינה המלאכותית תיצור עבורך.")
-    image_gen_prompt = st.text_area("התיאור שלך (באנגלית לקבלת התוצאות הטובות ביותר):", key="image_gen_prompt", placeholder="A photorealistic robot arm...")
-    if st.button("🎨 צור את התמונה", key="generate_btn"):
-        if image_gen_prompt:
-            with st.spinner("יוצר תמונה..."):
-                try:
-                    response = basic_model.generate_content(f"Generate an image of: {image_gen_prompt}")
-                    st.image(response.parts[0].inline_data.data, caption=image_gen_prompt)
-                except Exception:
-                    st.error("המודל לא החזיר תמונה. נסה תיאור אחר.")
-        else:
-            st.warning("אנא הזн תיאור לתמונה.")
-
-# --- טאב 5: מחולל מצגות ---
-# --- טאב 5: מחולל מצגות (עם הנחיות מותאמות אישית) ---
-with tabs[4]:
     st.header("מחולל מצגות PowerPoint")
     st.info("הגדר את נושא המצגת, הוסף בקשות מיוחדות, והבינה המלאכותית תיצור עבורך קובץ להורדה.")
 
@@ -215,7 +197,6 @@ with tabs[4]:
         slide_count = st.number_input("מספר שקופיות", min_value=3, max_value=20, value=7)
         target_audience = st.text_input("קהל יעד", placeholder="לדוגמה: 'תלמידי כיתה י\"א'")
         
-        # <<< הוספנו תיבת טקסט להנחיות נוספות >>>
         additional_instructions = st.text_area(
             "הנחיות נוספות או בקשות מיוחדות:",
             placeholder="לדוגמה: 'התמקד ביישומים תעשייתיים', 'הוסף שקופית על היסטוריית הנושא', 'שלב אנלוגיה פשוטה להסבר המושג המרכזי'"
@@ -226,7 +207,6 @@ with tabs[4]:
     if submitted:
         if ppt_topic and target_audience:
             with st.spinner(f"כותב את תוכן המצגת על '{ppt_topic}'..."):
-                # <<< שדרגנו את הפרומפט כך שיכלול את ההנחיות החדשות >>>
                 ppt_prompt = f"""
                 צור תוכן עבור מצגת PowerPoint בנושא '{ppt_topic}' המיועדת ל'{target_audience}'.
                 המצגת צריכה לכלול כ-{slide_count} שקופיות.
@@ -253,9 +233,6 @@ with tabs[4]:
                 file_name=f"{ppt_topic.replace(' ', '_')}.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
             )
-            st.balloons() # חגיגה קטנה :)
+            st.balloons()
             
-            with st.expander("הצג את התוכן הטקסטואלי של המצגת"):
-                st.markdown(f'<div style="direction: rtl; text-align: right;">{presentation_text}</div>', unsafe_allow_html=True)
-        else:
-            st.warning("אנא מלא את נושא המצגת וקהל היעד.")
+            with st.expander("הצג את התוכן הטקסטואלי של המצגת
